@@ -5,34 +5,26 @@
 #include "cmdmessage.h"
 #include "user/user.h"
 #include "message/message.h"
-#include <vector>
-
-std::vector<User> UserContainer;
-std::vector<Message> MessageContainer;
+#include "database/mysqlclient.h"
+#include "database/databasehandle.h"
+#include "database/databasetable.h"
 
 void foo()
 {
   std::string temp;
   TcpServer oTcpServer;
+  MySqlClient oMySqlClient;
+  DataBaseHandle oDataBaseHandle(oMySqlClient, "localhost", "test_user", "test_password", "test_database");
+  DataBaseTable oUserTable(oDataBaseHandle, "users", " first_name, login, password ", "users_id");
+  DataBaseTable oMessageTable(oDataBaseHandle, "messages", " _from, _to, _text ", "messages_id");
   while(1)
   {
      temp = "";
      oTcpServer.recieveFrom(temp);
      if(temp == "end")
      {
-	for(User& it : UserContainer)
-	{
-           std::cout << "Login is: " << it.GetUserLogin() << " ";
-	   std::cout << "Name is: " << it.GetUserName() << " "; 
-	   std::cout << "Password is: " << it.GetUserPassword() << std::endl;
-	}
-	for(Message& it : MessageContainer)
-	{
-           std::cout << "Message from: " << it.GetFrom() << " ";
-	   std::cout << "Message to: " << it.GetTo() << " "; 
-	   std::cout << "Message is: " << it.GetText() << std::endl;
-
-	}
+	oUserTable.MakeSelectAllTable();
+	oMessageTable.MakeSelectAllTable();
 	std::cout << "client Exited." << std::endl;
 	std::cout << "Server is Exiting..!" << std::endl;
 	break;
@@ -45,8 +37,9 @@ void foo()
         std::cout << "login is: " << oIncomingCmdUser.GetLogin() << std::endl;
         std::cout << "name is: " << oIncomingCmdUser.GetName() << std::endl;
        	std::cout << "password is: " << oIncomingCmdUser.GetPassword() << std::endl;
-	UserContainer.push_back(User{oIncomingCmdUser.GetLogin(), oIncomingCmdUser.GetPassword(), oIncomingCmdUser.GetName()});
-	CmdUser oOutgoingCmdUser(UserContainer.at(UserContainer.size() - 1));
+        User UserCheck{oIncomingCmdUser.GetLogin(), oIncomingCmdUser.GetPassword(), oIncomingCmdUser.GetName()};
+	oUserTable.MakeInsertIntoTable(oIncomingCmdUser.GetName(), oIncomingCmdUser.GetLogin(), oIncomingCmdUser.GetPassword()); 
+	CmdUser oOutgoingCmdUser(UserCheck);
 	std::cout << oOutgoingCmdUser.GetString() << std::endl;
 	temp = "Thank you for user!";
      }
@@ -55,18 +48,24 @@ void foo()
         std::cout << "message from: " << oIncomingCmdMessage.GetFrom() << std::endl;
         std::cout << "message to: " << oIncomingCmdMessage.GetTo() << std::endl;
        	std::cout << "text is: " << oIncomingCmdMessage.GetText() << std::endl;
-	MessageContainer.push_back(Message{oIncomingCmdMessage.GetFrom(), oIncomingCmdMessage.GetTo(), oIncomingCmdMessage.GetText()});
-	CmdMessage oOutgoingCmdMessage(MessageContainer.at(MessageContainer.size() - 1));
+	Message MessageCheck{oIncomingCmdMessage.GetFrom(), oIncomingCmdMessage.GetTo(), oIncomingCmdMessage.GetText()};
+	oMessageTable.MakeInsertIntoTable(oIncomingCmdMessage.GetFrom(), oIncomingCmdMessage.GetTo(), oIncomingCmdMessage.GetText());
+	CmdMessage oOutgoingCmdMessage(MessageCheck);
 	std::cout << oOutgoingCmdMessage.GetString() << std::endl;
 	temp = "Thank you for message!";  
      }
      else if(oIncomingCmdUser.isReadCmdCorrect())
      {
        	std::string itemnumber = oIncomingCmdUser.ParseRequestForReading();
-        int number = std::stoi(itemnumber);
-	if(number < UserContainer.size())
+        int number = std::stoi(itemnumber) + 1;
+	if(number <= oUserTable.GetTableSize())
 	{
-           CmdUser oOutgoingCmdUser(UserContainer.at(number));
+	   std::string first_field;
+	   std::string second_field;
+	   std::string third_field;
+	   oUserTable.MakeSelectFromTable(first_field, second_field, third_field, number);
+           User UserCheck{third_field, second_field, first_field};
+	   CmdUser oOutgoingCmdUser(UserCheck);
            temp = oOutgoingCmdUser.GetString();
 	}
 	else
@@ -77,10 +76,15 @@ void foo()
      else if(oIncomingCmdMessage.isReadCmdCorrect())
      {
         std::string itemnumber = oIncomingCmdMessage.ParseRequestForReading();
-        int number = std::stoi(itemnumber);
-	if(number < MessageContainer.size())
+        int number = std::stoi(itemnumber) + 1;
+	if(number <= oMessageTable.GetTableSize())
 	{
-           CmdMessage oOutgoingCmdMessage(MessageContainer.at(number));
+           std::string first_field;
+	   std::string second_field;
+	   std::string third_field;
+	   oMessageTable.MakeSelectFromTable(first_field, second_field, third_field, number);
+           Message MessageCheck{first_field, second_field, third_field};
+	   CmdMessage oOutgoingCmdMessage(MessageCheck);
            temp = oOutgoingCmdMessage.GetString();
 	}
 	else
@@ -103,14 +107,6 @@ void foo()
 
 int main (int argc, char* argv[])
 {
-   User admin1("admin1", "!1234", "master");
-   User admin2("admin2", "!4321", "submaster");
-   UserContainer.push_back(admin1);
-   UserContainer.push_back(admin2);
-   Message helloFromAdmin1("admin1", "all", "Hello all from master");
-   Message helloFromAdmin2("admin2", "all", "Hello all from submaster");
-   MessageContainer.push_back(helloFromAdmin1);
-   MessageContainer.push_back(helloFromAdmin2);
    foo();
    return 0;
 }
